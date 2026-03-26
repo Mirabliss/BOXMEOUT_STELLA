@@ -1146,7 +1146,249 @@ impl PredictionMarketContract {
         collateral_in: i128,
         min_shares_out: i128,
     ) -> Result<TradeReceipt, PredictionMarketError> {
-        todo!("Implement CPMM buy_shares with fee split and slippage guard")
+        let config = load_config(&env)?;
+        
+        // Check global emergency pause
+        if is_emergency_paused(&env, &config) {
+            return Err(PredictionMarketError::EmergencyPaused);
+        }
+
+        // Require buyer auth
+        buyer.require_auth();
+
+        // Load market and validate status
+        let mut market: Market = env
+            .storage()
+            .persistent()
+            .get(&DataKey::Market(market_id))
+            .ok_or(PredictionMarketError::MarketNotFound)?;
+
+        if market.status != MarketStatus::Open {
+            return Err(PredictionMarketError::MarketNotOpen);
+        }
+
+        let now = env.ledger().timestamp();
+        if now >= market.betting_close_time {
+            return Err(PredictionMarketError::BettingClosed);
+        }
+
+        // Validate outcome_id
+        if (outcome_id as usize) >= market.outcomes.len() as usize {
+            return Err(PredictionMarketError::InvalidOutcome);
+        }
+
+        // Validate minimum trade size
+        if collateral_in < config.min_trade {
+            return Err(PredictionMarketError::TradeTooSmall);
+        }
+
+        // Load AMM pool
+        let mut pool: AmmPool = env
+            .storage()
+            .persistent()
+            .get(&DataKey::AmmPool(market_id))
+            .ok_or(PredictionMarketError::PoolNotInitialized)?;
+
+        // Calculate fees
+        let protocol_fee = collateral_in
+            .checked_mul(config.fee_config.protocol_fee_bps as i128)
+            .and_then(|x| x.checked_div(10_000))
+            .ok_or(PredictionMarketError::ArithmeticError)?;
+        let lp_fee = collateral_in
+            .checked_mul(config.fee_config.lp_fee_bps as i128)
+            .and_then(|x| x.checked_div(10_000))
+            .ok_or(PredictionMarketError::ArithmeticError)?;
+        let creator_fee = collateral_in
+            .checked_mul(config.fee_config.creator_fee_bps as i128)
+            .and_then(|x| x.checked_div(10_000))
+            .ok_or(PredictionMarketError::ArithmeticError)?;
+        let total_fees = protocol_fee
+            .checked_add(lp_fee)
+            .and_then(|x| x.checked_add(creator_fee))
+            .ok_or(PredictionMarketError::ArithmeticError)?;
+        let net_collateral = collateral_in
+            .checked_sub(total_fees)
+            .ok_or(PredictionMarketError::ArithmeticError)?;
+
+        if net_collateral <= 0 {
+            return Err(PredictionMarketError::TradeTooSmall);
+        }
+
+        // Calculate shares out via AMM
+        let shares_out = amm::calc_buy_shares(&pool, outcome_id as usize, net_collateral);
+
+        // Slippage guard
+        if shares_out < min_shares_out {
+            return Err(PredictionMarketError::SlippageExceeded);
+        }
+
+        // Transfer collateral from buyer to contract
+        let token_client = soroban_sdk::token::TokenClient::new(&env, &config.token);
+        token_client.transfer(&buyer, &env.current_contract_address(), &collateral_in);
+
+        // Update pool reserves
+        pool = amm::update_reserves_buy(pool, outcome_id as usize, net_collateral, shares_out);
+        env.storage()
+            .persistent()
+            .set(&DataKey::AmmPool(market_id), &pool);
+
+        // Distribute fees
+        market.protocol_fee_pool = market
+            .protocol_fee_pool
+            .checked_add(protocol_fee)
+            .ok_or(PredictionMarketError::ArithmeticError)?;
+        market.creator_fee_pool = market
+            .creator_fee_pool
+            .checked_add(creator_fee)
+            .ok_or(PredictionMarketError::ArithmeticError)?;
+        market.lp_fee_pool = market
+            .lp_fee_pool
+            .checked_add(lp_fee)
+            .ok_or(PredictionMarketError::ArithmeticError)?;
+
+        // Update LP fee per share if there are LP shares
+        if market.total_lp_shares > 0 {
+            let fee_per_share_delta = lp_fee
+                .checked_mul(crate::math::SCALE)
+                .and_then(|x| x.checked_div(market.total_lp_shares))
+                .ok_or(PredictionMarketError::ArithmeticError)?;
+            
+            let current_fee_per_share: i128 = env
+                .storage()
+                .persistent()
+                .get(&DataKey::LpFeePerShare(market_id))
+                .unwrap_or(0);
+            let new_fee_per_share = current_fee_per_share
+                .checked_add(fee_per_share_delta)
+                .ok_or(PredictionMarketError::ArithmeticError)?;
+            env.storage()
+                .persistent()
+                .set(&DataKey::LpFeePerShare(market_id), &new_fee_per_share);
+        }
+
+        // Update or create user position
+        let position_key = DataKey::UserPosition(market_id, outcome_id, buyer.clone());
+        let mut position: UserPosition = env
+            .storage()
+            .persistent()
+            .get(&position_key)
+            .unwrap_or(UserPosition {
+                market_id,
+                outcome_id,
+                holder: buyer.clone(),
+                shares: 0,
+                redeemed: false,
+            });
+        position.shares = position
+            .shares
+            .checked_add(shares_out)
+            .ok_or(PredictionMarketError::ArithmeticError)?;
+        env.storage().persistent().set(&position_key, &position);
+
+        // Update UserMarketPositions
+        let user_positions_key = DataKey::UserMarketPositions(market_id, buyer.clone());
+        let mut user_positions: Vec<u32> = env
+            .storage()
+            .persistent()
+            .get(&user_positions_key)
+            .unwrap_or(Vec::new(&env));
+        
+        let mut has_outcome = false;
+        for i in 0..user_positions.len() {
+            if user_positions.get_unchecked(i) == outcome_id {
+                has_outcome = true;
+                break;
+            }
+        }
+        if !has_outcome {
+            user_positions.push_back(outcome_id);
+            env.storage()
+                .persistent()
+                .set(&user_positions_key, &user_positions);
+        }
+
+        // Update market total collateral
+        market.total_collateral = market
+            .total_collateral
+            .checked_add(collateral_in)
+            .ok_or(PredictionMarketError::ArithmeticError)?;
+
+        // Update outcome total shares outstanding
+        let mut outcomes = market.outcomes.clone();
+        let mut outcome = outcomes.get_unchecked(outcome_id);
+        outcome.total_shares_outstanding = outcome
+            .total_shares_outstanding
+            .checked_add(shares_out)
+            .ok_or(PredictionMarketError::ArithmeticError)?;
+        outcomes.set(outcome_id, outcome);
+        market.outcomes = outcomes;
+
+        // Update market stats
+        let mut stats: MarketStats = env
+            .storage()
+            .persistent()
+            .get(&DataKey::MarketStats(market_id))
+            .unwrap_or(MarketStats {
+                market_id,
+                total_volume: 0,
+                volume_24h: 0,
+                last_trade_at: 0,
+                unique_traders: 0,
+                open_interest: 0,
+            });
+        stats.total_volume = stats
+            .total_volume
+            .checked_add(collateral_in)
+            .ok_or(PredictionMarketError::ArithmeticError)?;
+        stats.last_trade_at = now;
+        
+        // Check if this is a new trader
+        let trader_key = DataKey::HasTraded(market_id, buyer.clone());
+        let has_traded: bool = env.storage().persistent().get(&trader_key).unwrap_or(false);
+        if !has_traded {
+            stats.unique_traders = stats
+                .unique_traders
+                .checked_add(1)
+                .ok_or(PredictionMarketError::ArithmeticError)?;
+            env.storage().persistent().set(&trader_key, &true);
+        }
+
+        env.storage()
+            .persistent()
+            .set(&DataKey::MarketStats(market_id), &stats);
+        env.storage()
+            .persistent()
+            .set(&DataKey::Market(market_id), &market);
+
+        // Calculate average price
+        let avg_price_bps = ((collateral_in
+            .checked_mul(10_000)
+            .ok_or(PredictionMarketError::ArithmeticError)?)
+            / shares_out)
+            .clamp(0, 10_000) as u32;
+
+        // Calculate new price
+        let new_price_bps = amm::calc_price_bps(&pool, outcome_id as usize);
+
+        // Emit event
+        events::shares_bought(
+            &env,
+            market_id,
+            buyer,
+            outcome_id,
+            collateral_in,
+            shares_out,
+            avg_price_bps,
+            total_fees,
+        );
+
+        Ok(TradeReceipt {
+            collateral_delta: collateral_in,
+            shares_delta: shares_out,
+            avg_price_bps,
+            total_fees,
+            new_price_bps,
+        })
     }
 
     /// Sell outcome shares back to the AMM in exchange for collateral.

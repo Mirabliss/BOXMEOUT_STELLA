@@ -299,7 +299,19 @@ pub fn shares_bought(
     avg_price_bps: u32,
     total_fees: i128,
 ) {
-    todo!("Emit shares_bought event")
+    #[allow(deprecated)]
+    env.events().publish(
+        (Symbol::new(env, "bought"), market_id, outcome_id),
+        (
+            market_id,
+            buyer,
+            outcome_id,
+            collateral_in,
+            shares_out,
+            avg_price_bps,
+            total_fees,
+        ),
+    );
 }
 
 /// Emitted on every successful `sell_shares` call.
