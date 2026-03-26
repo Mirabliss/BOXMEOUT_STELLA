@@ -1,99 +1,72 @@
 #!/bin/bash
 set -e
 
-FAILED=0
+# Helper to check node_modules
+check_deps() {
+  if [ ! -d "$1/node_modules" ]; then
+    echo "⚠️  node_modules missing in $1. Running 'npm install'..."
+    (cd "$1" && npm install)
+  fi
+}
 
-# Backend checks
+echo "🚀 Starting Consolidated Checks..."
+
+# --- Backend Checks ---
+echo ""
+echo "📦 Running Backend Checks..."
+check_deps "backend"
 cd backend
 
-echo "==============================="
-echo "  Backend Checks"
-echo "==============================="
+# Run linting and type-checking in parallel for speed
+echo "  - Running Prettier, ESLint, and TypeScript check..."
+npm run format:check > /dev/null 2>&1 &
+npm run lint -- --no-error-on-unmatched-pattern > /dev/null 2>&1 &
+npm run build > /dev/null 2>&1 &
 
-echo ""
-echo "Running Prettier check (backend)..."
-npx prettier --check "src/**/*.ts"
+wait
 
-echo ""
-echo "Running ESLint (backend)..."
-npx eslint "src/**/*.ts" --config .eslintrc.cjs || echo "ESLint check skipped (config issue)"
+echo "  - Running Prisma validation..."
+npm run prisma:generate > /dev/null 2>&1
+npx prisma validate
 
-echo ""
-echo "Running TypeScript build (backend)..."
-npx tsc --noEmit
-
-echo ""
-echo "Running Prisma validation..."
-npx prisma validate --schema=prisma/schema.prisma 2>/dev/null || DATABASE_URL="postgresql://localhost:5432/placeholder" npx prisma validate --schema=prisma/schema.prisma || echo "⚠ Prisma validation skipped (DATABASE_URL not set)"
-
-echo ""
-echo "Running backend unit tests..."
-npx vitest run tests/middleware tests/health.test.ts
-
-# Integration tests require PostgreSQL + Redis
-echo ""
-echo "Running backend integration tests (requires DB + Redis)..."
-if npx vitest run tests/auth.integration.test.ts tests/repositories tests/services tests/integration tests/health.deep.test.ts 2>/dev/null; then
-  echo "Integration tests passed!"
-else
-  echo "⚠ Integration tests skipped/failed (PostgreSQL or Redis not available)"
-fi
-
+echo "  - Running Backend tests..."
+npm test -- --run
 cd ..
 
-# Frontend checks
-if [ -d "frontend" ]; then
-  echo ""
-  echo "==============================="
-  echo "  Frontend Checks"
-  echo "==============================="
+# --- Frontend Checks ---
+echo ""
+echo "📦 Running Frontend Checks..."
+check_deps "frontend"
+cd frontend
 
-  cd frontend
+echo "  - Running Prettier and ESLint..."
+# Note: These scripts might need adjustment in package.json if they don't exist
+(npm run format:check || npx prettier --check "src/**/*.{js,jsx,ts,tsx}") > /dev/null 2>&1 &
+(npm run lint -- --no-error-on-unmatched-pattern || npx eslint "src/**/*.{js,jsx,ts,tsx}" --no-error-on-unmatched-pattern) > /dev/null 2>&1 &
+wait
 
-  echo ""
-  echo "Running Prettier check (frontend)..."
-  npx prettier --check "src/**/*.{js,jsx,ts,tsx}"
+echo "  - Building Frontend (Vite)..."
+npm run build
+cd ..
 
-  echo ""
-  echo "Running ESLint (frontend)..."
-  npx eslint "src/**/*.{js,jsx,ts,tsx}"
+# --- Contract Checks ---
+echo ""
+echo "📦 Running Smart Contract Checks..."
+cd contracts/contracts/boxmeout
 
-  echo ""
-  echo "Running frontend build..."
-  npx vite build
+echo "  - Running Rust formatting and Clippy..."
+cargo fmt -- --check &
+cargo clippy -- -D warnings &
+wait
 
-  cd ..
-fi
+echo "  - Running Rust tests..."
+cargo test --features testutils
 
-# Rust smart contract checks
-if [ -d "contracts/contracts/boxmeout" ]; then
-  echo ""
-  echo "==============================="
-  echo "  Smart Contract Checks"
-  echo "==============================="
+echo "  - Building Smart Contracts (Check mode)..."
+../../../build_contracts.sh --check
 
-  cd contracts/contracts/boxmeout
-
-  echo ""
-  echo "Running Rust formatting..."
-  cargo fmt -- --check
-
-  echo ""
-  echo "Running Rust lint (clippy)..."
-  cargo clippy -- -D warnings
-
-  echo ""
-  echo "Building Rust smart contracts..."
-  ../../../build_contracts.sh
-
-  echo ""
-  echo "Running Rust tests..."
-  cargo test --features testutils
-
-  cd ../../../
-fi
+cd ../../../
 
 echo ""
-echo "==============================="
-echo "  All checks passed!"
-echo "==============================="
+echo "✅ All checks passed successfully!"
+

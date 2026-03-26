@@ -9,6 +9,15 @@ Welcome to the future of sports engagement! **BOXMEOUT STELLA** is a groundbreak
 ## Technical Documentation
 **Prepared by:** [techhunter] | **GitHub:** [GoSTEAN] | **Contact:** [Your Email] | **Telegram:** [GoSTEAM]
 
+### Documentation Links
+
+| Document | Description |
+|---|---|
+| [DOAN_DOCS.md](DOAN_DOCS.md) | **DOAN** — Decentralized Oracle Attestation Network: architecture, attestation flow, staking, slashing, and API reference |
+| [backend/API_DOCUMENTATION.md](backend/API_DOCUMENTATION.md) | Full REST API reference with request/response schemas |
+| [DEPLOYMENT.md](DEPLOYMENT.md) | Docker-based deployment guide |
+| [contracts/README.md](contracts/README.md) | Soroban smart contract reference |
+
 ## Project Overview
 ### What is the Wrestling Prediction Market?
 The Wrestling Prediction Market is a decentralized, gamified platform built on Stellar that enables users to predict wrestling match outcomes while maintaining privacy through cryptographic commitments. Leveraging Stellar's fast, low-cost transactions and smart contract capabilities via Soroban, the platform combines blockchain transparency with privacy preservation, creating a fair and engaging prediction ecosystem where users can bet on wrestling events, earn rewards, and climb competitive leaderboards without exposing their betting strategies prematurely.
@@ -217,6 +226,37 @@ We use GitHub Actions for automated CI/CD. See [.github/workflows/README.md](.gi
 - ✅ Security & dependency audits
 - ✅ Code quality analysis
 - ✅ PR validation
+
+## GitHub Issues & Project Management
+
+We've created a comprehensive issue tracking system to manage development:
+
+**📋 45 Issues Documented** across all components:
+- 12 Smart Contract issues
+- 8 Backend issues
+- 7 Frontend issues
+- 6 DevOps issues
+- 5 Testing issues
+- 4 Documentation issues
+- 3 Security issues
+
+**Quick Links:**
+- 📊 [Issues Summary](ISSUES_SUMMARY.md) - High-level overview
+- 📝 [Complete Issue List](.github/GITHUB_ISSUES.md) - All 45 issues detailed
+- 🚀 [Quick Start Guide](.github/QUICK_START_ISSUES.md) - Create top 10 priority issues
+- 📋 [Project Board Guide](.github/PROJECT_BOARD.md) - Sprint planning & management
+- ✅ [Setup Checklist](GITHUB_SETUP_CHECKLIST.md) - Step-by-step setup guide
+- 🏗️ [Structure Overview](.github/STRUCTURE.md) - Visual diagrams
+
+**Get Started:**
+```bash
+# Create GitHub issues using our script
+cd .github/scripts
+./create_issues.sh
+
+# Or follow the quick start guide
+cat .github/QUICK_START_ISSUES.md
+```
 
 ### Contributing
 

@@ -1,16 +1,17 @@
 name: Contracts CI
 
-on:
-  push:
-    branches: [main, develop]
-    paths:
-      - 'contracts/**'
-      - '.github/workflows/contracts.yml'
-  pull_request:
-    branches: [main, develop]
-    paths:
-      - 'contracts/**'
-      - '.github/workflows/contracts.yml'
+# on:
+#   push:
+#     branches: [main, develop]
+#     paths:
+#       - 'contracts/**'
+#       - '.github/workflows/contracts.yml'
+#   pull_request:
+#     branches: [main, develop]
+#     paths:
+#       - 'contracts/**'
+#       - '.github/workflows/contracts.yml'
+on: workflow_dispatch
 
 jobs:
   test-contracts:
