@@ -101,4 +101,8 @@ pub enum PredictionMarketError {
     ArithmeticError = 100,
     TransferFailed = 101,
     InvalidTimestamp = 102,
+    /// Market is in an unexpected status for the requested operation
+    InvalidMarketStatus = 103,
+    /// Resolution deadline has already passed
+    ResolutionDeadlinePassed = 104,
 }
