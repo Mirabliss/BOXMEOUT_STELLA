@@ -409,6 +409,48 @@ impl PredictionMarketContract {
         todo!("Implement is_operator check")
     }
 
+    /// Set or revoke the Operator role for an address.
+    /// Only the admin can call this function.
+    ///
+    /// # Arguments
+    /// - `env` — contract environment
+    /// - `address` — the address to grant or revoke operator privileges to
+    /// - `active` — if `true`, grant the operator role; if `false`, revoke it
+    ///
+    /// # Errors
+    /// - `NotInitialized` if contract not bootstrapped
+    /// - `Unauthorized` if caller is not the admin
+    ///
+    /// # Events
+    /// - Emits `events::operator_set(address, active)`
+    pub fn set_operator(
+        env: Env,
+        address: Address,
+        active: bool,
+    ) -> Result<(), PredictionMarketError> {
+        let config = load_config(&env)?;
+
+        // Require auth from current admin
+        config.admin.require_auth();
+
+        if active {
+            // Grant operator role
+            env.storage()
+                .persistent()
+                .set(&DataKey::IsOperator(address.clone()), &true);
+        } else {
+            // Revoke operator role
+            env.storage()
+                .persistent()
+                .remove(&DataKey::IsOperator(address.clone()));
+        }
+
+        // Emit event
+        events::operator_set(&env, address, active);
+
+        Ok(())
+    }
+
     /// Return the current state of the global emergency pause.
     ///
     /// # Returns
