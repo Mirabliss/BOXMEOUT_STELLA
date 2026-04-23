@@ -3,23 +3,64 @@
 // Lists all boxing markets with filters and sorting.
 // ============================================================
 
-/**
- * Home page — market discovery.
- *
- * Must render:
- *   - Page title: "BOXMEOUT — Boxing Prediction Market"
- *   - Filter bar:
- *       Weight class dropdown (All / Heavyweight / Super-Middleweight / etc.)
- *       Status filter (All / Open / Resolved)
- *       Sort: Soonest / Most Pooled / Newest
- *   - Market grid of MarketCard components
- *   - Skeleton grid while isLoading === true
- *   - Empty state when no markets match filters
- *   - Pagination controls if total > limit
- *
- * Uses the useMarkets hook for data.
- * Filter state is synced to URL query params (?status=open&weight_class=Heavyweight).
- */
+'use client';
+
+// ============================================================
+// BOXMEOUT — Home Page (/  )
+// Lists all boxing markets with filters and sorting.
+// ============================================================
+
+import { useState } from 'react';
+import { useMarkets } from '../hooks/useMarkets';
+import { MarketCard } from '../components/market/MarketCard';
+
+const WEIGHT_CLASSES = ['All', 'Heavyweight', 'Super-Middleweight', 'Middleweight', 'Welterweight', 'Lightweight'];
+const STATUSES = ['All', 'Open', 'Resolved'];
+
 export default function HomePage(): JSX.Element {
-  // TODO: implement
+  const [weightClass, setWeightClass] = useState('All');
+  const [status, setStatus] = useState('All');
+  const { markets, isLoading } = useMarkets({
+    weight_class: weightClass === 'All' ? undefined : weightClass,
+    status: status === 'All' ? undefined : status.toLowerCase(),
+  });
+
+  return (
+    <main className="max-w-6xl mx-auto px-4 py-6 space-y-6">
+      <h1 className="text-xl font-black text-white">BOXMEOUT — Boxing Prediction Market</h1>
+
+      {/* Filter bar — wraps on mobile */}
+      <div className="flex flex-wrap gap-3">
+        <select
+          value={weightClass}
+          onChange={(e) => setWeightClass(e.target.value)}
+          className="min-h-[44px] bg-gray-800 text-white text-sm rounded-lg px-3 focus:outline-none focus:ring-2 focus:ring-amber-500"
+        >
+          {WEIGHT_CLASSES.map((w) => <option key={w}>{w}</option>)}
+        </select>
+        <select
+          value={status}
+          onChange={(e) => setStatus(e.target.value)}
+          className="min-h-[44px] bg-gray-800 text-white text-sm rounded-lg px-3 focus:outline-none focus:ring-2 focus:ring-amber-500"
+        >
+          {STATUSES.map((s) => <option key={s}>{s}</option>)}
+        </select>
+      </div>
+
+      {/* Grid — 1 col mobile, 2 col md, 3 col lg */}
+      {isLoading ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="bg-gray-900 rounded-xl h-40 animate-pulse" />
+          ))}
+        </div>
+      ) : markets.length === 0 ? (
+        <p className="text-gray-500 text-center py-16">No markets match your filters.</p>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {markets.map((m) => <MarketCard key={m.market_id} market={m} />)}
+        </div>
+      )}
+    </main>
+  );
 }

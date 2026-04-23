@@ -51,7 +51,7 @@ export function Header(): JSX.Element {
 
             {/* Mobile hamburger */}
             <button
-              className="md:hidden text-gray-400 hover:text-white"
+              className="md:hidden flex items-center justify-center w-11 h-11 text-gray-400 hover:text-white"
               onClick={() => setMenuOpen((o) => !o)}
               aria-label="Toggle menu"
             >
@@ -62,9 +62,9 @@ export function Header(): JSX.Element {
 
         {/* Mobile nav */}
         {menuOpen && (
-          <nav className="md:hidden bg-gray-950 border-t border-gray-800 px-4 py-3 flex flex-col gap-3 text-sm text-gray-300">
-            <Link href="/" onClick={() => setMenuOpen(false)} className="hover:text-white">Home</Link>
-            <Link href="/portfolio" onClick={() => setMenuOpen(false)} className="hover:text-white">Portfolio</Link>
+          <nav className="md:hidden bg-gray-950 border-t border-gray-800 px-4 py-2 flex flex-col text-sm text-gray-300">
+            <Link href="/" onClick={() => setMenuOpen(false)} className="flex items-center min-h-[44px] hover:text-white">Home</Link>
+            <Link href="/portfolio" onClick={() => setMenuOpen(false)} className="flex items-center min-h-[44px] hover:text-white">Portfolio</Link>
           </nav>
         )}
       </header>

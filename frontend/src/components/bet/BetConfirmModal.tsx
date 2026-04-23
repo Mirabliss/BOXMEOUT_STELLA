@@ -43,7 +43,7 @@ export function BetConfirmModal({
       onClick={onCancel}
     >
       <div
-        className="bg-gray-900 rounded-xl p-6 w-full max-w-sm space-y-4 text-white"
+        className="bg-gray-900 rounded-xl p-6 w-full max-w-sm mx-4 space-y-4 text-white"
         onClick={(e) => e.stopPropagation()}
       >
         <h2 className="text-lg font-bold">Confirm Bet</h2>
@@ -54,8 +54,8 @@ export function BetConfirmModal({
           <div className="flex justify-between font-semibold"><dt className="text-gray-400">Est. payout</dt><dd>{estimated_payout_xlm.toFixed(4)} XLM</dd></div>
         </dl>
         <div className="flex gap-3 pt-2">
-          <button onClick={onCancel} className="flex-1 py-2 rounded-lg border border-gray-600 hover:bg-gray-800">Cancel</button>
-          <button onClick={onConfirm} className="flex-1 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 font-semibold text-black">Confirm Bet</button>
+          <button onClick={onCancel} className="flex-1 min-h-[44px] rounded-lg border border-gray-600 hover:bg-gray-800">Cancel</button>
+          <button onClick={onConfirm} className="flex-1 min-h-[44px] rounded-lg bg-amber-500 hover:bg-amber-400 font-semibold text-black">Confirm Bet</button>
         </div>
       </div>
     </div>,

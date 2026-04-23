@@ -31,5 +31,65 @@ export function BetHistoryTable({
   onClaim,
   onRefund,
 }: BetHistoryTableProps): JSX.Element {
-  // TODO: implement
+  if (bets.length === 0) {
+    return <p className="text-gray-500 text-sm text-center py-6">No bets to show.</p>;
+  }
+
+  return (
+    <div className="overflow-x-auto -mx-4 px-4">
+      <table className="min-w-full text-sm text-left text-gray-300">
+        <thead>
+          <tr className="text-xs text-gray-500 border-b border-gray-800">
+            <th className="pb-2 pr-4 whitespace-nowrap">Market</th>
+            <th className="pb-2 pr-4 whitespace-nowrap">Side</th>
+            <th className="pb-2 pr-4 whitespace-nowrap">Amount</th>
+            <th className="pb-2 pr-4 whitespace-nowrap">Status</th>
+            <th className="pb-2 pr-4 whitespace-nowrap">Payout</th>
+            <th className="pb-2 whitespace-nowrap">Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {bets.map((bet) => {
+            const payout = bet.payout ? parseFloat(bet.payout) : null;
+
+            let action: JSX.Element;
+            if (bet.claimed) {
+              action = <span className="text-green-400">{payout != null ? `${payout.toFixed(2)} XLM` : '—'}</span>;
+            } else if (payout != null && payout > 0) {
+              action = (
+                <button
+                  onClick={() => onClaim(bet.market_id)}
+                  className="min-h-[44px] px-3 rounded-lg bg-amber-500 hover:bg-amber-400 font-semibold text-black text-xs"
+                >
+                  Claim
+                </button>
+              );
+            } else if (payout === 0) {
+              action = (
+                <button
+                  onClick={() => onRefund(bet.market_id)}
+                  className="min-h-[44px] px-3 rounded-lg bg-gray-700 hover:bg-gray-600 text-xs"
+                >
+                  Refund
+                </button>
+              );
+            } else {
+              action = <span className="text-gray-500">Pending</span>;
+            }
+
+            return (
+              <tr key={bet.tx_hash} className="border-b border-gray-800/50">
+                <td className="py-3 pr-4 font-mono text-xs whitespace-nowrap">{bet.market_id.slice(0, 8)}…</td>
+                <td className="py-3 pr-4 capitalize whitespace-nowrap">{bet.side.replace('_', ' ')}</td>
+                <td className="py-3 pr-4 whitespace-nowrap">{bet.amount_xlm} XLM</td>
+                <td className="py-3 pr-4 whitespace-nowrap">{bet.claimed ? 'Claimed' : payout != null ? (payout > 0 ? 'Won' : 'Lost') : 'Active'}</td>
+                <td className="py-3 pr-4 whitespace-nowrap">{payout != null ? `${payout.toFixed(2)} XLM` : '—'}</td>
+                <td className="py-3 whitespace-nowrap">{action}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
 }

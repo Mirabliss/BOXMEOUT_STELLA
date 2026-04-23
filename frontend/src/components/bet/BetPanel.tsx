@@ -6,6 +6,7 @@ import { useBet } from '../../hooks/useBet';
 import { useWallet } from '../../hooks/useWallet';
 import { BetConfirmModal } from './BetConfirmModal';
 import { TxStatusToast } from '../ui/TxStatusToast';
+import { ConnectPrompt } from '../ui/ConnectPrompt';
 import { useAppStore } from '../../store';
 
 interface BetPanelProps {
@@ -19,7 +20,7 @@ const SIDES: { value: BetSide; label: (a: string, b: string) => string }[] = [
 ];
 
 export function BetPanel({ market }: BetPanelProps): JSX.Element {
-  const { isConnected, connect } = useWallet();
+  const { isConnected } = useWallet();
   const { side, setSide, amount, setAmount, estimatedPayout, isSubmitting, txStatus, submitBet, reset } = useBet(market);
   const setTxStatus = useAppStore((s) => s.setTxStatus);
   const [showModal, setShowModal] = useState(false);
@@ -29,14 +30,7 @@ export function BetPanel({ market }: BetPanelProps): JSX.Element {
   const canSubmit = isConnected && !!side && isAmountValid && !isSubmitting && market.status === 'open';
 
   if (!isConnected) {
-    return (
-      <div className="rounded-xl bg-gray-900 p-6 text-center space-y-3">
-        <p className="text-gray-400 text-sm">Connect your wallet to place a bet</p>
-        <button onClick={connect} className="w-full py-2 rounded-lg bg-amber-500 hover:bg-amber-400 font-semibold text-black">
-          Connect Wallet to Bet
-        </button>
-      </div>
-    );
+    return <ConnectPrompt />;
   }
 
   if (market.status !== 'open') {
@@ -56,7 +50,7 @@ export function BetPanel({ market }: BetPanelProps): JSX.Element {
           <button
             key={value}
             onClick={() => setSide(value)}
-            className={`flex-1 py-2 rounded-lg text-sm font-semibold transition-colors ${
+            className={`flex-1 min-h-[44px] rounded-lg text-sm font-semibold transition-colors ${
               side === value
                 ? 'bg-amber-500 text-black'
                 : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
@@ -98,7 +92,7 @@ export function BetPanel({ market }: BetPanelProps): JSX.Element {
       <button
         disabled={!canSubmit}
         onClick={() => setShowModal(true)}
-        className="w-full py-2 rounded-lg bg-amber-500 hover:bg-amber-400 font-semibold text-black disabled:opacity-40 disabled:cursor-not-allowed"
+        className="w-full min-h-[44px] rounded-lg bg-amber-500 hover:bg-amber-400 font-semibold text-black disabled:opacity-40 disabled:cursor-not-allowed"
       >
         {isSubmitting ? 'Placing Bet…' : 'Place Bet'}
       </button>
