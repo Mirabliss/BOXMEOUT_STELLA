@@ -13,6 +13,7 @@
 import { useState } from 'react';
 import { useMarkets } from '../hooks/useMarkets';
 import { MarketCard } from '../components/market/MarketCard';
+import { MarketCardSkeleton } from '../components/market/MarketCardSkeleton';
 
 const WEIGHT_CLASSES = ['All', 'Heavyweight', 'Super-Middleweight', 'Middleweight', 'Welterweight', 'Lightweight'];
 const STATUSES = ['All', 'Open', 'Resolved'];
@@ -50,9 +51,7 @@ export default function HomePage(): JSX.Element {
       {/* Grid — 1 col mobile, 2 col md, 3 col lg */}
       {isLoading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="bg-gray-900 rounded-xl h-40 animate-pulse" />
-          ))}
+          {Array.from({ length: 6 }).map((_, i) => <MarketCardSkeleton key={i} />)}
         </div>
       ) : markets.length === 0 ? (
         <p className="text-gray-500 text-center py-16">No markets match your filters.</p>
