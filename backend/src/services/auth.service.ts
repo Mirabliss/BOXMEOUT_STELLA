@@ -5,6 +5,7 @@ import { generateSecret, generateQRCode, verifyToken } from './totp.service';
 import { sendPasswordResetEmail } from './email.service';
 import { redis } from './cache.service';
 import { AppError } from '../utils/AppError';
+import { logger } from '../utils/logger';
 
 const JWT_SECRET = process.env.JWT_SECRET ?? 'dev-jwt-secret-change-me';
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN ?? '15m';
@@ -20,6 +21,8 @@ interface UserRecord {
   id: string;
   email: string;
   passwordHash: string;
+  emailVerified: boolean;
+  emailVerificationToken?: string; // UUID stored in Redis
   twoFactorSecret?: string;   // AES-GCM encrypted base32 secret
   twoFactorEnabled: boolean;
   /**
@@ -113,6 +116,50 @@ export async function isSessionRevoked(userId: string, sessionVersion: number): 
 // ---------------------------------------------------------------------------
 // Auth service
 // ---------------------------------------------------------------------------
+
+/**
+ * Registers a new user and sends verification email.
+ * User cannot trade or withdraw until email is verified.
+ */
+export async function register(
+  email: string,
+  password: string,
+): Promise<{ userId: string; message: string }> {
+  // Check if user already exists
+  const existing = [...users.values()].find((u) => u.email === email);
+  if (existing) {
+    throw new AppError(409, 'Email already registered');
+  }
+
+  // Create user
+  const userId = randomUUID();
+  const user: UserRecord = {
+    id: userId,
+    email,
+    passwordHash: password, // TODO: hash with bcrypt
+    emailVerified: false,
+    twoFactorEnabled: false,
+  };
+  users.set(userId, user);
+
+  // Generate verification token
+  const token = await generateEmailVerificationToken(userId);
+
+  // Send verification email
+  const sent = await sendVerificationEmail(email, token, VERIFY_EMAIL_URL);
+  if (!sent) {
+    // Clean up user if email send fails
+    users.delete(userId);
+    throw new AppError(500, 'Failed to send verification email');
+  }
+
+  logger.info({ message: 'User registered', userId, email });
+
+  return {
+    userId,
+    message: 'Registration successful. Please check your email to verify your account.',
+  };
+}
 
 /** Stub login — replace with real password check against DB */
 export async function login(
