@@ -1,7 +1,5 @@
-# Rust's output directory
-target
-test_snapshots
-
-# Local settings
-.soroban
-.stellar
+/target
+*target
+/node_modules
+*.log
+*.cache 
