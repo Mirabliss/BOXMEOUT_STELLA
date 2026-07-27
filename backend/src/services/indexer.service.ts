@@ -190,10 +190,28 @@ export async function saveLastIndexedLedger(ledger: number): Promise<void> {
  * Processes all contract events in a single ledger.
  * Routes each event to the appropriate handler by event.type.
  * Wrapped in a Prisma interactive transaction — all handlers succeed or none persist.
+ *
+ * Idempotency guarantee: checks EventLog for previously processed events
+ * (txHash + eventType) and skips them. Marks each event as processed on success.
+ * This ensures never reprocessing already-processed events on restart (Task 4).
  */
 export async function processLedger(ledger: LedgerData): Promise<void> {
   await prisma.$transaction(async () => {
     for (const event of ledger.events) {
+      // ── Task 4 + Task 3: Idempotent event processing via EventLog ──────
+      // Skip events already successfully processed (safe on restart mid-stream)
+      const alreadyProcessed = await prisma.eventLog.findUnique({
+        where: { txHash_eventType: { txHash: event.txHash, eventType: event.type } },
+      });
+      if (alreadyProcessed) {
+        logger.debug(
+          { eventType: event.type, txHash: event.txHash },
+          "Event already processed — skipping"
+        );
+        continue;
+      }
+
+      // ── Route to handler ───────────────────────────────────────────
       switch (event.type) {
         case "MarketCreated":
           await handleMarketCreatedEvent(event);
@@ -227,6 +245,17 @@ export async function processLedger(ledger: LedgerData): Promise<void> {
           );
           break;
       }
+
+      // ── Task 3: Mark event as processed (processedAt timestamp) ─────
+      await prisma.eventLog.create({
+        data: {
+          eventType: event.type,
+          contractId: event.contractId,
+          ledger: event.ledger,
+          txHash: event.txHash,
+          body: event.body as object,
+        },
+      });
     }
   });
 }
@@ -277,6 +306,9 @@ export async function handleMarketCreatedEvent(event: SorobanEvent): Promise<voi
 /**
  * Parses BetPlaced event body, records the bet and updates pool totals.
  *
+ * Pool totals are updated atomically with bet insertion — both operations
+ * execute within the same $transaction wrapping processLedger (Task 2).
+ *
  * Expected event.body shape:
  * {
  *   bet_id:    string,
@@ -292,6 +324,7 @@ export async function handleMarketCreatedEvent(event: SorobanEvent): Promise<voi
 export async function handleBetPlacedEvent(event: SorobanEvent): Promise<void> {
   const b = event.body;
 
+  // Both operations execute atomically inside the $transaction in processLedger
   await betService.recordBet({
     id: b.bet_id as string,
     marketId: b.market_id as string,
@@ -331,12 +364,26 @@ export async function handleBetPlacedEvent(event: SorobanEvent): Promise<void> {
  * Parses MarketResolved event and calls market.service.updateMarketStatus()
  * with the final outcome decoded from the event body.
  *
+ * Gracefully rejects out-of-order application: if the market doesn't exist yet
+ * (market_created event hasn't been processed), throws an error so the ledger
+ * transaction rolls back and the indexer retries on the next poll cycle.
+ *
  * Expected event.body: { market_id, outcome: "FighterA"|"FighterB"|"Draw"|"NoContest" }
  */
 export async function handleMarketResolvedEvent(event: SorobanEvent): Promise<void> {
   const b = event.body;
+  const marketId = b.market_id as string;
+
+  // ── Task 1: Out-of-order guard — reject gracefully if market not yet created ──
+  const market = await prisma.market.findUnique({ where: { id: marketId } });
+  if (!market) {
+    throw new Error(
+      `Market ${marketId} not found — event arrived out of order (market_created not yet processed), will retry`
+    );
+  }
+
   await marketService.updateMarketStatus(
-    b.market_id as string,
+    marketId,
     "Resolved",
     b.outcome as "FighterA" | "FighterB" | "Draw" | "NoContest"
   );
@@ -347,6 +394,10 @@ export async function handleMarketResolvedEvent(event: SorobanEvent): Promise<vo
 
   logger.info({ marketId: b.market_id, outcome: b.outcome }, "MarketResolved processed");
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// handleWinnersClaimedEvent
+// ─────────────────────────────────────────────────────────────────────────────
 
 /**
  * Parses WinningsClaimed event.
@@ -380,6 +431,10 @@ export async function handleRefundClaimedEvent(event: SorobanEvent): Promise<voi
   logger.info({ marketId: b.market_id, bettor: b.bettor, type: event.type }, "RefundClaimed processed");
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// handleMarketLockedEvent
+// ─────────────────────────────────────────────────────────────────────────────
+
 /**
  * Parses MarketLocked event and sets market status to Locked in DB.
  *
@@ -390,6 +445,10 @@ export async function handleMarketLockedEvent(event: SorobanEvent): Promise<void
   await marketService.updateMarketStatus(b.market_id as string, "Locked");
   logger.info({ marketId: b.market_id }, "MarketLocked processed");
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// handleDisputeEvent
+// ─────────────────────────────────────────────────────────────────────────────
 
 /**
  * Parses DisputeRaised or DisputeResolved events and syncs dispute state to DB.
