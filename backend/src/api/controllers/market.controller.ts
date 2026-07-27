@@ -39,7 +39,10 @@ const createMarketSchema = z.object({
  * GET /api/markets/search?q=&page=&limit=
  * Full-text search across question + description. Returns paginated { data, total }.
  */
-export async function searchMarketsHandler(req: Request, res: Response): Promise<void> {
+export async function searchMarketsHandler(
+  req: Request,
+  res: Response
+): Promise<void> {
   const q = String(req.query.q ?? "").trim();
   if (!q) {
     res.status(400).json({ error: "q is required", code: "VALIDATION_ERROR" });
@@ -139,7 +142,11 @@ export async function getMarketStatsHandler(req: Request, res: Response): Promis
   try {
     const stats = await marketService.getMarketStats(req.params.id);
     res.json({ data: stats });
-  } catch (err) {
+  } catch (err: any) {
+    if (err?.code === "NOT_FOUND") {
+      res.status(404).json({ error: "Market not found" });
+      return;
+    }
     logger.error({ err }, "getMarketStatsHandler failed");
     res.status(500).json({ error: "Internal server error" });
   }
@@ -184,7 +191,9 @@ export async function resolveMarketHandler(
     const { oracle_result_id } = req.body;
 
     if (oracle_result_id === undefined || oracle_result_id === null) {
-      res.status(400).json({ error: "oracle_result_id is required", code: "VALIDATION_ERROR" });
+      res
+        .status(400)
+        .json({ error: "oracle_result_id is required", code: "VALIDATION_ERROR" });
       return;
     }
 
@@ -207,7 +216,10 @@ export async function resolveMarketHandler(
 /**
  * POST /api/admin/markets/dispute/resolve
  */
-export async function resolveDisputeHandler(req: Request, res: Response): Promise<void> {
+export async function resolveDisputeHandler(
+  req: Request,
+  res: Response
+): Promise<void> {
   try {
     res.json({ success: true });
   } catch (err) {
@@ -293,7 +305,10 @@ export async function resolveDisputeByIdHandler(req: Request, res: Response): Pr
 /**
  * GET /api/admin/markets/pending
  */
-export async function getPendingResolutionsHandler(req: Request, res: Response): Promise<void> {
+export async function getPendingResolutionsHandler(
+  req: Request,
+  res: Response
+): Promise<void> {
   try {
     const markets = await marketService.getAllMarkets({ status: "Locked" });
     res.json({ data: markets });
@@ -306,7 +321,10 @@ export async function getPendingResolutionsHandler(req: Request, res: Response):
 /**
  * GET /health
  */
-export async function healthCheckHandler(req: Request, res: Response): Promise<void> {
+export async function healthCheckHandler(
+  req: Request,
+  res: Response
+): Promise<void> {
   try {
     await db.$queryRaw`SELECT 1`;
     res.status(200).json({ status: "ok", db: "connected" });

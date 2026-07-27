@@ -2,6 +2,7 @@ import { Router } from "express";
 import {
   searchMarketsHandler,
   getMarketsHandler,
+  getMarketsByCreatorHandler,
   getMarketByIdHandler,
   getMarketStatsHandler,
   getMarketBetsHandler,
