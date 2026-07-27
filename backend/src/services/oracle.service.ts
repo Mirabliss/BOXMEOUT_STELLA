@@ -44,6 +44,46 @@ export interface ExternalFightResult {
  * @throws {Error}                   If market not found or not in Locked status.
  * @throws {OracleAuthorizationError} If reporter is not the authorized oracle.
  */
+export async function submitResolution(
+  marketId: string,
+  outcome: Outcome,
+  source: string = "admin",
+  reporter: string = "admin"
+): Promise<OracleResult> {
+  const market = await prisma.market.findUnique({ where: { id: marketId } });
+  if (!market) {
+    throw new Error(`Market not found: ${marketId}`);
+  }
+
+  const oracleResult = await prisma.oracleResult.upsert({
+    where: { marketId },
+    create: {
+      marketId,
+      reportedBy: reporter,
+      outcome,
+      source,
+      confirmed: true,
+    },
+    update: {
+      reportedBy: reporter,
+      outcome,
+      source,
+      confirmed: true,
+    },
+  });
+
+  await prisma.market.update({
+    where: { id: marketId },
+    data: {
+      status: "Resolved",
+      outcome,
+      resolvedAt: new Date(),
+    },
+  });
+
+  return oracleResult;
+}
+
 export async function submitFightResult(
   market_id: string,
   outcome: Outcome,

@@ -188,7 +188,8 @@ export async function resolveMarketHandler(
   next: NextFunction
 ): Promise<void> {
   try {
-    const { oracle_result_id } = req.body;
+    const { market_id, marketId, outcome, oracle_result_id, source, reporter } = req.body;
+    const targetMarketId = market_id || marketId;
 
     if (oracle_result_id === undefined || oracle_result_id === null) {
       res
@@ -206,8 +207,7 @@ export async function resolveMarketHandler(
       return;
     }
 
-    await oracleService.confirmFightResult(String(id), "admin");
-    res.status(200).json({ status: "ok" });
+    res.status(400).json({ error: "market_id (or marketId) and outcome required", code: "VALIDATION_ERROR" });
   } catch (err) {
     next(err);
   }
@@ -221,10 +221,37 @@ export async function resolveDisputeHandler(
   res: Response
 ): Promise<void> {
   try {
-    res.json({ success: true });
+    const { dispute_id, disputeId, outcome, notes, decisionNotes } = req.body;
+    const targetDisputeId = dispute_id || disputeId;
+    const notesText = notes || decisionNotes;
+
+    if (!targetDisputeId) {
+      res.status(400).json({ error: "dispute_id is required", code: "VALIDATION_ERROR" });
+      return;
+    }
+
+    if (!outcome) {
+      res.status(400).json({ error: "outcome is required", code: "VALIDATION_ERROR" });
+      return;
+    }
+
+    if (!notesText || !String(notesText).trim()) {
+      res.status(400).json({ error: "Notes explaining the decision are required for audit", code: "VALIDATION_ERROR" });
+      return;
+    }
+
+    const admin = (req as any).user?.id || (req as any).admin || "admin";
+
+    const result = await ResolutionService.handleDispute({
+      disputeId: String(targetDisputeId),
+      outcome,
+      admin,
+      notes: String(notesText),
+    });
+
+    res.status(200).json({ success: true, status: "ok", data: result });
   } catch (err) {
-    logger.error({ err }, "resolveDisputeHandler failed");
-    res.status(500).json({ error: "Internal server error" });
+    next(err);
   }
 }
 
