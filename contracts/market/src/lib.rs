@@ -28,17 +28,6 @@ pub enum DataKey {
     DisputeReason,
 }
 
-#[contracttype]
-#[derive(Clone, Debug, PartialEq)]
-pub struct BetPlacedEvent {
-    pub bet_id:    Bytes,
-    pub market_id: Bytes,
-    pub bettor:    Address,
-    pub side:      BetSide,
-    pub amount:    i128,
-    pub placed_at: u64,
-}
-
 #[contract]
 pub struct MarketContract;
 
@@ -195,20 +184,20 @@ impl MarketContract {
             .get(&Symbol::new(&env, "BET_COUNT"))
             .unwrap_or(0u64);
         let new_count = bet_count + 1;
+        env.storage().persistent().set(&Symbol::new(&env, "BET_COUNT"), &new_count);
+
         let mut id_bytes = [0u8; 32];
         id_bytes[..8].copy_from_slice(&new_count.to_be_bytes());
         let bet_id = Bytes::from_array(&env, &id_bytes);
-        env.storage()
-            .persistent()
-            .set(&Symbol::new(&env, "BET_COUNT"), &new_count);
 
+        let placed_at = env.ledger().timestamp();
         let bet = Bet {
             bet_id: bet_id.clone(),
             market_id: market.market_id.clone(),
             bettor: bettor.clone(),
             side: side.clone(),
             amount,
-            placed_at: env.ledger().timestamp(),
+            placed_at,
             claimed: false,
         };
         env.storage().persistent().set(&DataKey::Bet(bet_id.clone()), &bet);
@@ -339,12 +328,21 @@ impl MarketContract {
             _ => MarketStatus::Resolved,
         };
         market.outcome = Some(outcome.clone());
+        let resolution_time = env.ledger().timestamp();
         env.storage().persistent().set(&DataKey::MarketInfo, &market);
 
-        env.events().publish(
-            (symbol_short!("resolved"),),
-            (market.market_id, outcome, env.ledger().timestamp()),
-        );
+        // Emit market_resolved event with market_id, outcome, and resolution_time
+        let market_id_u64 = u64::from_le_bytes([
+            market.market_id.as_ref()[0],
+            market.market_id.as_ref()[1],
+            market.market_id.as_ref()[2],
+            market.market_id.as_ref()[3],
+            market.market_id.as_ref()[4],
+            market.market_id.as_ref()[5],
+            market.market_id.as_ref()[6],
+            market.market_id.as_ref()[7],
+        ]);
+        events::emit_market_resolved(&env, market_id_u64, outcome, resolution_time);
     }
 
     /// Allows a winning bettor to claim their proportional share of the pool.
@@ -430,10 +428,27 @@ impl MarketContract {
         // Mark claimed BEFORE any transfer (re-entrancy guard).
         env.storage().persistent().set(&DataKey::Claimed(bet_id.clone()), &true);
 
-        env.events().publish(
-            (symbol_short!("claimed"),),
-            (bettor, bet_id, payout),
-        );
+        // Emit winnings_claimed event with market_id, claimant, and amount (payout after fee)
+        let market_id_u64 = u64::from_le_bytes([
+            market.market_id.as_ref()[0],
+            market.market_id.as_ref()[1],
+            market.market_id.as_ref()[2],
+            market.market_id.as_ref()[3],
+            market.market_id.as_ref()[4],
+            market.market_id.as_ref()[5],
+            market.market_id.as_ref()[6],
+            market.market_id.as_ref()[7],
+        ]);
+
+        // Create ClaimReceipt for event emission
+        use shared::types::ClaimReceipt;
+        let receipt = ClaimReceipt {
+            bet_id: bet_id.clone(),
+            bettor: bettor.clone(),
+            payout,
+            claimed_at: env.ledger().timestamp(),
+        };
+        events::emit_winnings_claimed(&env, market_id_u64, receipt);
 
         payout
     }
@@ -568,6 +583,12 @@ impl MarketContract {
         // Transition to Disputed status
         market.status = MarketStatus::Disputed;
         Self::write_market(&env, &market);
+
+        // Cap reason length to prevent storage abuse (max 256 bytes)
+        let max_reason_len = 256;
+        if reason.len() > max_reason_len {
+            panic!("dispute reason exceeds maximum length");
+        }
 
         // Store dispute reason
         env.storage().persistent().set(&DataKey::DisputeRaised, &true);
