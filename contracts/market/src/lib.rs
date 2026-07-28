@@ -95,7 +95,7 @@ impl MarketContract {
             panic!("already initialized");
         }
         let market = Market {
-            market_id,
+            market_id: market_id.clone(),
             fighter_a,
             fighter_b,
             scheduled_at,
@@ -115,6 +115,14 @@ impl MarketContract {
         };
         env.storage().persistent().set(&DataKey::MarketInfo, &market);
         env.storage().persistent().set(&DataKey::Factory, &factory);
+
+        // Emit market_created event with contract address and market info
+        // Topics: (Symbol("market_created"), market_id)
+        // Data: Market struct (matches MarketInfo field-for-field)
+        env.events().publish(
+            (Symbol::new(&env, "market_created"), market_id),
+            market,
+        );
     }
 
     /// Places a bet on a fighter in this market.

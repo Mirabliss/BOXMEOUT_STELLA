@@ -129,6 +129,8 @@ impl Treasury {
 
         let caller = env.current_contract_address();
 
+        let caller = env.current_contract_address();
+
         let registered: Address = env.invoke_contract(
             &factory,
             &Symbol::new(&env, "get_market_address"),
@@ -226,6 +228,8 @@ impl Treasury {
             (Symbol::new(&env, "FeesWithdrawn"),),
             (recipient, amount, ts),
         );
+
+        amount
     }
 
     /// Drains all treasury funds to `recipient` in an emergency.
@@ -314,7 +318,8 @@ impl Treasury {
 
     /// Returns the current treasury XLM balance.
     ///
-    /// Read-only — does not modify state.
+    /// Read-only — does not modify state. Matches the sum of all deposits
+    /// minus all withdrawals.
     ///
     /// # Returns
     ///
@@ -388,9 +393,10 @@ impl Treasury {
 // ─── TESTS ────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
-mod tests_init {
+mod tests {
     use super::*;
     use shared::test_utils::{create_test_address, create_test_env};
+    use soroban_sdk::IntoVal;
 
     #[test]
     fn test_initialize_success() {
@@ -407,6 +413,7 @@ mod tests_init {
 
         assert_eq!(client.get_balance(), 0);
         assert_eq!(client.get_total_fees_earned(), 0);
+        assert_eq!(client.get_fee_bps(), 0);
         assert_eq!(client.get_withdrawal_log().len(), 0);
         assert_eq!(client.get_fee_bps(), 200);
         assert_eq!(client.get_fee_recipient(), fee_recipient);
