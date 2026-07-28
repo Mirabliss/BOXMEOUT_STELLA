@@ -106,16 +106,15 @@ impl Treasury {
 
     /// Receives protocol fees from a registered `Market` contract.
     ///
-    /// Verifies the caller is the `Market` contract registered under `market_id`
-    /// in the factory via a cross-contract call. Adds `amount` to both `BALANCE`
-    /// and `TOTAL_FEES_EARNED`. Emits a `FeesDeposited` event.
+    /// Only callable by a Market contract address registered with the factory.
+    /// Increments the per-market escrow balance and emits a `BetDeposited` event.
     ///
     /// # Arguments
     ///
     /// * `env` - The Soroban execution environment.
-    /// * `market_id` - Identifier of the market depositing fees, used to verify
-    ///   the caller against the factory registry.
-    /// * `amount` - Amount of XLM fees to deposit, in stroops.
+    /// * `from_market` - Address of the Market contract depositing bets (must be authorized).
+    /// * `market_id` - Identifier of the market, used for per-market escrow tracking.
+    /// * `amount` - Amount of XLM to deposit into escrow, in stroops.
     ///
     /// # Panics
     ///
