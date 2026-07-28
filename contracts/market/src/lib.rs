@@ -757,6 +757,10 @@ impl MarketContract {
     /// Uses the same formula as [`claim_winnings`] but does not modify state.
     /// Intended for frontend display of live payout estimates before market resolution.
     ///
+    /// Pure view function that computes a user's stake plus their proportional share
+    /// of the losing pool, minus applicable fees. Handles zero losing pool (payout == stake)
+    /// without division-by-zero. Uses checked/saturating arithmetic - no overflow panics.
+    ///
     /// # Arguments
     ///
     /// * `env` - The Soroban execution environment.
@@ -843,6 +847,73 @@ impl MarketContract {
             (a, 10_000u32.checked_sub(a).expect("odds underflow"))
         };
         (market.pool_a, market.pool_b, odds_a, odds_b)
+    }
+
+    /// Returns complete market data including status, pools, and metadata.
+    ///
+    /// Read-only — does not modify state. Returns the full Market struct containing
+    /// fighter information, pools, fees, status, and outcome.
+    ///
+    /// # Arguments
+    ///
+    /// * `env` - The Soroban execution environment.
+    ///
+    /// # Returns
+    ///
+    /// Returns the complete [`Market`] struct for this contract.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the market has not been initialized.
+    pub fn get_market_data(env: Env) -> Market {
+        env.storage().persistent()
+            .get(&DataKey::MarketInfo)
+            .expect("market not initialized")
+    }
+
+    /// Returns a specific bet placed by an address, or None if not found.
+    ///
+    /// Read-only — does not modify state. Retrieves a bet by its ID and returns
+    /// None if the address does not have a bet with that ID.
+    ///
+    /// # Arguments
+    ///
+    /// * `env` - The Soroban execution environment.
+    /// * `bettor` - Address to query bets for.
+    /// * `bet_id` - Unique identifier of the bet.
+    ///
+    /// # Returns
+    ///
+    /// Returns `Some(Bet)` if the bet exists and belongs to the address, or `None` otherwise.
+    pub fn get_user_bet(env: Env, bettor: Address, bet_id: Bytes) -> Option<Bet> {
+        if let Some(bet) = env.storage().persistent().get::<_, Bet>(&DataKey::Bet(bet_id)) {
+            if bet.bettor == bettor {
+                return Some(bet);
+            }
+        }
+        None
+    }
+
+    /// Returns current pool totals for both fighters.
+    ///
+    /// Read-only — does not modify state. Returns the amount staked on each fighter
+    /// and the total pool size.
+    ///
+    /// # Arguments
+    ///
+    /// * `env` - The Soroban execution environment.
+    ///
+    /// # Returns
+    ///
+    /// Returns a tuple `(pool_a, pool_b, total_pool)` where:
+    /// - `pool_a` - Total XLM staked on Fighter A, in stroops.
+    /// - `pool_b` - Total XLM staked on Fighter B, in stroops.
+    /// - `total_pool` - Total XLM in all pools, in stroops.
+    pub fn get_pool_totals(env: Env) -> (i128, i128, i128) {
+        let market: Market = env.storage().persistent()
+            .get(&DataKey::MarketInfo)
+            .expect("market not initialized");
+        (market.pool_a, market.pool_b, market.total_pool)
     }
 }
 
